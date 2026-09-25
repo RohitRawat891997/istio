@@ -3,7 +3,7 @@
 client----gateway----virtualservice----service---pod
 
 root@controlplane:~/traffic-deploy$ kubectl  create  ns  hello
-root@controlplane:~/traffic-deploy$ 
+root@controlplane:~/traffic-deploy$ kubectl   label   ns  hello   istio-injection=enabled
 root@controlplane:~/traffic-deploy$ cat   application.yaml 
 apiVersion: apps/v1
 kind: Deployment
@@ -108,4 +108,18 @@ root@controlplane:~$ curl   foo.example.com
 Hello World
 root@controlplane:~$ 
 root@controlplane:~$ 
+root@controlplane:~$ kubectl   get  po,svc  -n  hello 
+NAME                         READY   STATUS    RESTARTS   AGE
+pod/hello-5b8c95c97c-zp2tq   2/2     Running   0          8m26s
 
+NAME            TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
+service/hello   ClusterIP   10.108.50.161   <none>        8080/TCP   11m
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ kubectl   get  gw,vs  -n  hello 
+NAME                                        AGE
+gateway.networking.istio.io/hello-gateway   8m
+
+NAME                                          GATEWAYS            HOSTS                 AGE
+virtualservice.networking.istio.io/hello-vs   ["hello-gateway"]   ["foo.example.com"]   7m29s
+root@controlplane:~$ 
