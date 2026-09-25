@@ -23,7 +23,8 @@ spec:
     spec:
       containers:
         - name: hello
-          image: docker.io/rohitrawat891997/addressbook:latest
+          image: docker.io/rohitrawat891997/httpd:latest
+          command: ['sh', '-c', 'echo "Hello World" > /usr/local/apache2/htdocs/index.html && httpd-foreground']
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
@@ -103,62 +104,8 @@ root@controlplane:~$  vim  /etc/hosts
 
 :wq!
 root@controlplane:~$ 
+root@controlplane:~$ curl   foo.example.com
+Hello World
 root@controlplane:~$ 
-root@controlplane:~$ curl  foo.example.com
-<!doctype html>
-<html>
- <head>
-  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=11;chrome=1">
-  <title>Addressbook</title>
-  <style type="text/css">html, body {height:100%;margin:0;}</style>
-  <link rel="shortcut icon" type="image/vnd.microsoft.icon" href="./VAADIN/themes/valo/favicon.ico">
-  <link rel="icon" type="image/vnd.microsoft.icon" href="./VAADIN/themes/valo/favicon.ico">
- </head>
- <body scroll="auto" class="v-generated-body">
-  <div id="ROOT-2521314" class="v-app valo addressbookui">
-   <div class="v-app-loading"></div>
-   <noscript>
-    You have to enable javascript in your browser to use an application built with Vaadin.
-   </noscript>
-  </div>
-  <script type="text/javascript" src="./VAADIN/vaadinBootstrap.js?v=8.0.0.alpha2"></script>
-  <script type="text/javascript">//<![CDATA[
-if (!window.vaadin) alert("Failed to load the bootstrap javascript: ./VAADIN/vaadinBootstrap.js?v=8.0.0.alpha2");
-if (typeof window.__gwtStatsEvent != 'function') {
-vaadin.gwtStatsEvents = [];
-window.__gwtStatsEvent = function(event) {vaadin.gwtStatsEvents.push(event); return true;};
-}
-vaadin.initApplication("ROOT-2521314",{
-    "theme": "valo",
-    "versionInfo": {
-        "vaadinVersion": "8.0.0.alpha2"
-    },
-    "widgetset": "com.vaadin.v7.Vaadin7WidgetSet",
-    "widgetsetReady": true,
-    "comErrMsg": {
-        "caption": "Communication problem",
-        "message": "Take note of any unsaved data, and <u>click here</u> or press ESC to continue.",
-        "url": null
-    },
-    "authErrMsg": {
-        "caption": "Authentication problem",
-        "message": "Take note of any unsaved data, and <u>click here</u> or press ESC to continue.",
-        "url": null
-    },
-    "sessExpMsg": {
-        "caption": "Session Expired",
-        "message": "Take note of any unsaved data, and <u>click here</u> or press ESC key to continue.",
-        "url": null
-    },
-    "vaadinDir": "./VAADIN/",
-    "debug": true,
-    "standalone": true,
-    "heartbeatInterval": 300,
-    "serviceUrl": "."
-});
-//]]></script>
- </body>
-</html>root@controlplane:~$ 
 root@controlplane:~$ 
 
