@@ -98,6 +98,11 @@ root@controlplane:~$
 root@controlplane:~$ 
 root@controlplane:~$
 root@controlplane:~$  vim  /etc/hosts
+
+10.97.132.26   foo.example.com
+
+:wq!
+root@controlplane:~$ 
 root@controlplane:~$ 
 root@controlplane:~$ curl  foo.example.com
 <!doctype html>
@@ -156,7 +161,4 @@ vaadin.initApplication("ROOT-2521314",{
  </body>
 </html>root@controlplane:~$ 
 root@controlplane:~$ 
-root@controlplane:~$ 
-10.97.132.26   foo.example.com
 
-:wq!
