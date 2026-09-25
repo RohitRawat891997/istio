@@ -1,0 +1,104 @@
+#### Example of gateway traffic flow ####
+
+client----gateway----virtualservice----service---pod
+
+root@controlplane:~/traffic-deploy$ kubectl  create  ns  hello
+root@controlplane:~/traffic-deploy$ 
+root@controlplane:~/traffic-deploy$ cat   application.yaml 
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello
+spec:
+  selector:
+    matchLabels:
+      app: hello
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: hello
+      annotations:
+        sidecar.istio.io/inject: "true"
+    spec:
+      containers:
+        - name: hello
+          image: docker.io/rohitrawat891997/addressbook:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: hello
+  name: hello
+spec:
+  ports:
+    - name: http-8080
+      port: 8080
+      targetPort: 8080
+  selector:
+    app: hello
+root@controlplane:~/traffic-deploy$ 
+root@controlplane:~/traffic-deploy$ kubectl  create  -f   application.yaml -n  hello
+deployment.apps/hello created
+service/hello created
+root@controlplane:~/traffic-deploy$ 
+root@controlplane:~/traffic-deploy$ cat  gateway.yaml 
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: hello-gateway
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "foo.example.com"
+root@controlplane:~/traffic-deploy$ 
+root@controlplane:~/traffic-deploy$ 
+root@controlplane:~/traffic-deploy$ 
+root@controlplane:~/traffic-deploy$ kubectl  create -f    gateway.yaml   -n  hello 
+gateway.networking.istio.io/hello-gateway created
+root@controlplane:~/traffic-deploy$ 
+root@controlplane:~/traffic-deploy$ cat  virtual-service.yaml 
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: hello-vs
+spec:
+  hosts:
+  - "foo.example.com"
+  gateways:
+  - hello-gateway
+  http:
+  - route:
+    - destination:
+        host: hello.hello.svc.cluster.local
+        port:
+          number: 8080
+root@controlplane:~/traffic-deploy$ 
+root@controlplane:~/traffic-deploy$ 
+root@controlplane:~/traffic-deploy$ kubectl  create  -f   virtual-service.yaml   -n  hello 
+virtualservice.networking.istio.io/hello-vs created
+root@controlplane:~/traffic-deploy$ 
+root@controlplane:~$ 
+root@controlplane:~$ kubectl  get  svc  -n  istio-system 
+NAME                   TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)                                                                      AGE
+istio-egressgateway    ClusterIP   10.111.86.97    <none>        80/TCP,443/TCP                                                               10m
+istio-ingressgateway   NodePort    10.97.132.26    <none>        15021:30650/TCP,80:32091/TCP,443:30984/TCP,31400:32759/TCP,15443:30454/TCP   10m
+istiod                 ClusterIP   10.96.235.136   <none>        15010/TCP,15012/TCP,443/TCP,15014/TCP                                        11m
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$
+root@controlplane:~$  vim  /etc/hosts
+
+10.97.132.26   foo.example.com
+
+:wq!
