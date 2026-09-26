@@ -1,0 +1,699 @@
+Routing traffic based on request Headers
+=======================================================
+
+Lab-1: without Destination Rules Lab
+
+root@controlplane:~$ cat    application.yaml 
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: headers-v1
+  labels:
+    app: headers
+    version: v1
+spec:
+  selector:
+    matchLabels:
+      app: headers
+      version: v1
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: headers
+        version: v1
+      annotations:
+        sidecar.istio.io/inject: "true"
+    spec:
+      containers:
+        - name: headers
+          image: docker.io/rohitrawat891997/httpd:latest
+          command: 
+            - 'sh'
+            - '-c'
+            - 'echo "Hello World!" > /usr/local/apache2/htdocs/index.html && httpd-foreground'
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: headers-v2
+  labels:
+    app: headers
+    version: v2
+spec:
+  selector:
+    matchLabels:
+      app: headers
+      version: v2
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: headers
+        version: v2
+      annotations:
+        sidecar.istio.io/inject: "true"
+    spec:
+      containers:
+        - name: headers
+          image: docker.io/rohitrawat891997/httpd:latest
+          command: 
+            - 'sh'
+            - '-c'
+            - ' echo "Hello Red Hat!" > /usr/local/apache2/htdocs/index.html && httpd-foreground'
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: headers
+  name: headers
+spec:
+  ports:
+    - name: http
+      port: 8080
+  selector:
+    app: headers
+---
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: headers-gateway
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "*"
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: headers-vs
+spec:
+  hosts:
+    - "*"
+  gateways:
+    - headers-gateway
+  http:
+    - match:
+        - uri:
+            prefix: /headers
+      rewrite:
+        uri: /
+      route:
+        - destination:
+            host: headers
+            port:
+              number: 8080
+
+root@controlplane:~$ 
+root@controlplane:~$ kubectl  create  -f   application.yaml 
+deployment.apps/headers-v1 created
+deployment.apps/headers-v2 created
+service/headers created
+gateway.networking.istio.io/headers-gateway created
+virtualservice.networking.istio.io/headers-vs created
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ kubectl  get  all
+NAME                              READY   STATUS    RESTARTS   AGE
+pod/headers-v1-b59c58dc-gt6cv     2/2     Running   0          5m54s
+pod/headers-v2-5989f69fc6-s4h76   2/2     Running   0          5m54s
+
+NAME                 TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)    AGE
+service/headers      ClusterIP   10.99.111.21   <none>        8080/TCP   5m54s
+service/kubernetes   ClusterIP   10.96.0.1      <none>        443/TCP    6d14h
+
+NAME                         READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/headers-v1   1/1     1            1           5m54s
+deployment.apps/headers-v2   1/1     1            1           5m54s
+
+NAME                                    DESIRED   CURRENT   READY   AGE
+replicaset.apps/headers-v1-b59c58dc     1         1         1       5m54s
+replicaset.apps/headers-v2-5989f69fc6   1         1         1       5m54s
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ kubectl  get  gw,vs
+NAME                                          AGE
+gateway.networking.istio.io/headers-gateway   6m
+
+NAME                                            GATEWAYS              HOSTS   AGE
+virtualservice.networking.istio.io/headers-vs   ["headers-gateway"]   ["*"]   6m
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ kubectl  get  svc  -n  istio-system 
+NAME                   TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)                                                                      AGE
+istio-egressgateway    ClusterIP   10.97.199.246   <none>        80/TCP,443/TCP                                                               19m
+istio-ingressgateway   NodePort    10.106.28.173   <none>        15021:32059/TCP,80:32721/TCP,443:31743/TCP,31400:31064/TCP,15443:32116/TCP   19m
+istiod                 ClusterIP   10.97.170.160   <none>        15010/TCP,15012/TCP,443/TCP,15014/TCP                                        19m
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ vim  /etc/hosts
+
+
+10.106.28.173   foo.example.com
+
+:wq!
+
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ ./release-canary/test_canary.py   foo.example.com/headers
+Canary Release Test
+Sending 50 requests to foo.example.com/headers ...
+
+
+Hello World!
+Hello World!
+Hello World!
+Hello Red Hat!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello Red Hat!
+Hello Red Hat!
+Hello Red Hat!
+Hello World!
+Hello Red Hat!
+Hello World!
+Hello Red Hat!
+Hello Red Hat!
+Hello World!
+Hello Red Hat!
+Hello Red Hat!
+Hello World!
+Hello World!
+Hello Red Hat!
+Hello Red Hat!
+Hello Red Hat!
+Hello World!
+Hello World!
+Hello Red Hat!
+Hello Red Hat!
+Hello Red Hat!
+Hello Red Hat!
+Hello Red Hat!
+Hello Red Hat!
+Hello Red Hat!
+Hello Red Hat!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello Red Hat!
+Hello Red Hat!
+Hello Red Hat!
+Hello Red Hat!
+Hello World!
+Hello Red Hat!
+Hello Red Hat!
+Hello Red Hat!
+Hello Red Hat!
+Hello World!
+Hello Red Hat!
+Hello World!
+
+
+#### Stats ####
+
+Total requests: 50
+* 'Hello World!' responses: 21 (42.0%)
+* 'Hello Red Hat!' responses: 29 (57.99999999999999%)
+* Errors: 0 (0.0%)
+root@controlplane:~$ 
+=========================================================================================
+
+Lab-2: Route all traffic to the v1 subset
+
+
+
+root@controlplane:~$ cat    application.yaml 
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: headers-v1
+  labels:
+    app: headers
+    version: v1
+spec:
+  selector:
+    matchLabels:
+      app: headers
+      version: v1
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: headers
+        version: v1
+      annotations:
+        sidecar.istio.io/inject: "true"
+    spec:
+      containers:
+        - name: headers
+          image: docker.io/rohitrawat891997/headers:v1
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: headers-v2
+  labels:
+    app: headers
+    version: v2
+spec:
+  selector:
+    matchLabels:
+      app: headers
+      version: v2
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: headers
+        version: v2
+      annotations:
+        sidecar.istio.io/inject: "true"
+    spec:
+      containers:
+        - name: headers
+          image: docker.io/rohitrawat891997/headers:v2
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: headers
+  name: headers
+spec:
+  ports:
+    - name: http
+      port: 8080
+  selector:
+    app: headers
+---
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: headers-gateway
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "*"
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: headers-vs
+spec:
+  hosts:
+    - "*"
+  gateways:
+    - headers-gateway
+  http:
+    - match:
+        - uri:
+            prefix: /headers
+      route:
+        - destination:
+            host: headers
+            subset: alpha 
+
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: headers
+spec:
+  host: headers
+  subsets:
+  - name: alpha
+    labels:
+      version: v1
+  - name: beta
+    labels:
+      version: v2
+root@controlplane:~$ 
+root@controlplane:~$ 
+
+root@controlplane:~$ 
+root@controlplane:~$ kubectl  create  -f  application.yaml 
+deployment.apps/headers-v1 created
+deployment.apps/headers-v2 created
+service/headers created
+gateway.networking.istio.io/headers-gateway created
+virtualservice.networking.istio.io/headers-vs created
+destinationrule.networking.istio.io/headers created
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ kubectl  get  all
+NAME                              READY   STATUS    RESTARTS   AGE
+pod/headers-v1-5bd694858c-zh4p9   2/2     Running   0          9s
+pod/headers-v2-8657bb95ff-89nm2   2/2     Running   0          9s
+
+NAME                 TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
+service/headers      ClusterIP   10.101.31.138   <none>        8080/TCP   9s
+service/kubernetes   ClusterIP   10.96.0.1       <none>        443/TCP    6d14h
+
+NAME                         READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/headers-v1   1/1     1            1           9s
+deployment.apps/headers-v2   1/1     1            1           9s
+
+NAME                                    DESIRED   CURRENT   READY   AGE
+replicaset.apps/headers-v1-5bd694858c   1         1         1       9s
+replicaset.apps/headers-v2-8657bb95ff   1         1         1       9s
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ kubectl   get  gw,vs,dr
+NAME                                          AGE
+gateway.networking.istio.io/headers-gateway   22s
+
+NAME                                            GATEWAYS              HOSTS   AGE
+virtualservice.networking.istio.io/headers-vs   ["headers-gateway"]   ["*"]   21s
+
+NAME                                          HOST      AGE
+destinationrule.networking.istio.io/headers   headers   21s
+root@controlplane:~$ 
+root@controlplane:~$ 
+
+root@controlplane:~$ ./release-canary/test_canary.py   foo.example.com/headers
+Canary Release Test
+Sending 50 requests to foo.example.com/headers ...
+
+
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+
+
+#### Stats ####
+
+Total requests: 50
+* 'Hello World!' responses: 50 (100.0%)
+* Errors: 0 (0.0%)
+root@controlplane:~$ 
+
+=========================================================================================
+
+Lab-3: Match condition (/headers perfix and an http header called end-user with redhatter as value)
+
+root@controlplane:~$ cat    application.yaml 
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: headers-v1
+  labels:
+    app: headers
+    version: v1
+spec:
+  selector:
+    matchLabels:
+      app: headers
+      version: v1
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: headers
+        version: v1
+      annotations:
+        sidecar.istio.io/inject: "true"
+    spec:
+      containers:
+        - name: headers
+          image: docker.io/rohitrawat891997/headers:v1
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: headers-v2
+  labels:
+    app: headers
+    version: v2
+spec:
+  selector:
+    matchLabels:
+      app: headers
+      version: v2
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: headers
+        version: v2
+      annotations:
+        sidecar.istio.io/inject: "true"
+    spec:
+      containers:
+        - name: headers
+          image: docker.io/rohitrawat891997/headers:v2
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: headers
+  name: headers
+spec:
+  ports:
+    - name: http
+      port: 8080
+  selector:
+    app: headers
+---
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: headers-gateway
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "*"
+---
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: headers-vs
+spec:
+  hosts:
+    - "*"
+  gateways:
+    - headers-gateway
+
+  http:
+    - match:
+        - uri:
+            prefix: /headers
+          headers:
+            end-user:
+              exact: redhatter
+      route:
+        - destination:
+            host: headers
+            subset: beta
+            port:
+              number: 8080
+
+    - match:
+        - uri:
+            prefix: /headers
+      route:
+        - destination:
+            host: headers
+            subset: alpha
+            port:
+              number: 8080
+
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: headers
+spec:
+  host: headers
+  subsets:
+  - name: alpha
+    labels:
+      version: v1
+  - name: beta
+    labels:
+      version: v2
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ kubectl  create  -f   application.yaml 
+deployment.apps/headers-v1 created
+deployment.apps/headers-v2 created
+service/headers created
+gateway.networking.istio.io/headers-gateway created
+virtualservice.networking.istio.io/headers-vs created
+destinationrule.networking.istio.io/headers created
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ kubectl  get   all 
+NAME                              READY   STATUS            RESTARTS   AGE
+pod/headers-v1-5bd694858c-5vv2v   2/2     Running           0          10s
+pod/headers-v2-8657bb95ff-wfvvg   0/2     PodInitializing   0          10s
+
+NAME                 TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
+service/headers      ClusterIP   10.101.23.215   <none>        8080/TCP   10s
+service/kubernetes   ClusterIP   10.96.0.1       <none>        443/TCP    6d15h
+
+NAME                         READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/headers-v1   1/1     1            1           10s
+deployment.apps/headers-v2   0/1     1            0           10s
+
+NAME                                    DESIRED   CURRENT   READY   AGE
+replicaset.apps/headers-v1-5bd694858c   1         1         1       10s
+replicaset.apps/headers-v2-8657bb95ff   1         1         0       10s
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ kubectl  get  gw,vs,dr
+NAME                                          AGE
+gateway.networking.istio.io/headers-gateway   21s
+
+NAME                                            GATEWAYS              HOSTS   AGE
+virtualservice.networking.istio.io/headers-vs   ["headers-gateway"]   ["*"]   21s
+
+NAME                                          HOST      AGE
+destinationrule.networking.istio.io/headers   headers   21s
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ kubectl  get  svc  -n  istio-system 
+NAME                   TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)                                                                      AGE
+istio-egressgateway    ClusterIP   10.109.112.18   <none>        80/TCP,443/TCP                                                               8m41s
+istio-ingressgateway   NodePort    10.106.141.90   <none>        15021:31272/TCP,80:32253/TCP,443:31266/TCP,31400:32513/TCP,15443:32493/TCP   8m41s
+istiod                 ClusterIP   10.104.222.94   <none>        15010/TCP,15012/TCP,443/TCP,15014/TCP                                        9m2s
+kiali                  NodePort    10.101.31.44    <none>        20001:30009/TCP,9090:31917/TCP                                               6m41s
+prometheus             ClusterIP   10.111.7.160    <none>        9090/TCP                                                                     3m16s
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ vim  /etc/hosts
+
+
+10.106.141.90   foo.example.com
+
+:wq!
+
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~/traffic-route$ 
+root@controlplane:~/traffic-route$ 
+root@controlplane:~/traffic-route$ curl  foo.example.com/headers
+Hello World!
+root@controlplane:~/traffic-route$ 
+root@controlplane:~/traffic-route$ 
+root@controlplane:~/traffic-route$ curl  foo.example.com/headers
+Hello World!
+root@controlplane:~/traffic-route$ curl  foo.example.com/headers
+Hello World!
+root@controlplane:~/traffic-route$ curl  foo.example.com/headers
+Hello World!
+root@controlplane:~/traffic-route$ curl  foo.example.com/headers
+Hello World!
+root@controlplane:~/traffic-route$ 
+root@controlplane:~/traffic-route$ curl  -s -H "end-user: redhatter" foo.example.com/headers
+Hello Red Hat!
+root@controlplane:~/traffic-route$ curl  -s -H "end-user: redhatter" foo.example.com/headers
+Hello Red Hat!
+root@controlplane:~/traffic-route$ curl  -s -H "end-user: redhatter" foo.example.com/headers
+Hello Red Hat!
+root@controlplane:~/traffic-route$ curl  -s -H "end-user: redhatter" foo.example.com/headers
+Hello Red Hat!
+root@controlplane:~/traffic-route$ curl  -s -H "end-user: redhatter" foo.example.com/headers
+Hello Red Hat!
+root@controlplane:~/traffic-route$ 
+
+
+
+
+
