@@ -1,0 +1,339 @@
+
+#### Example of destination rules traffic flow ####
+
+client----myapp.example.com----istio-gateway(gw)----virtualService(vs)----destination rule(dr)----service(my-app-svc)-----subset: v1 90% /subset: v2 10%
+
+root@controlplane:~$ 
+root@controlplane:~$ cat  application.yaml 
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app-v1
+  labels:
+    app: my-app
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: my-app
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: my-app
+        version: v1
+    spec:
+      containers:
+      - name: app
+        image: docker.io/rohitrawat891997/httpd:latest  # Replace with your v1 image
+        command: ['sh', '-c', 'echo "Hello World!" > /usr/local/apache2/htdocs/index.html && httpd-foreground']
+        ports:
+        - containerPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app-v2
+  labels:
+    app: my-app
+    version: v2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-app
+      version: v2
+  template:
+    metadata:
+      labels:
+        app: my-app
+        version: v2
+    spec:
+      containers:
+      - name: app
+        image: docker.io/rohitrawat891997/httpd:latest  # Replace with your v2 image
+        command: ['sh', '-c', 'echo "Hello Red Hat!" > /usr/local/apache2/htdocs/index.html && httpd-foreground']
+        ports:
+        - containerPort: 8080
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-app-svc
+  labels:
+    app: my-app
+spec:
+  ports:
+  - port: 8080
+    name: http
+    targetPort: 8080
+  selector:
+    app: my-app # Routes to all pods labeled app: my-app regardless of version
+root@controlplane:~$ 
+root@controlplane:~$ kubectl  create  -f   application.yaml 
+deployment.apps/my-app-v1 created
+deployment.apps/my-app-v2 created
+service/my-app-svc created
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ kubectl get  all
+NAME                             READY   STATUS    RESTARTS   AGE
+pod/my-app-v1-9b75b8c5b-k9p5g    2/2     Running   0          13m
+pod/my-app-v1-9b75b8c5b-smxt9    2/2     Running   0          13m
+pod/my-app-v2-5d7c484b79-2qns6   2/2     Running   0          13m
+
+NAME                 TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)    AGE
+service/kubernetes   ClusterIP   10.96.0.1     <none>        443/TCP    6d10h
+service/my-app-svc   ClusterIP   10.96.11.24   <none>        8080/TCP   13m
+
+NAME                        READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/my-app-v1   2/2     2            2           13m
+deployment.apps/my-app-v2   1/1     1            1           13m
+
+NAME                                   DESIRED   CURRENT   READY   AGE
+replicaset.apps/my-app-v1-9b75b8c5b    2         2         2       13m
+replicaset.apps/my-app-v2-5d7c484b79   1         1         1       13m
+root@controlplane:~$ 
+root@controlplane:~$ cd  release-canary/
+root@controlplane:~/release-canary$ 
+root@controlplane:~/release-canary$ ls
+deployment-v1.yaml  destination-rule.yaml  gateway.yaml  service.yaml  test_canary.py  virtual-service.yaml
+root@controlplane:~/release-canary$ 
+root@controlplane:~/release-canary$ ./test_canary.py 10.96.11.24:8080
+Canary Release Test
+Sending 50 requests to 10.96.191.86:8080 ...
+
+
+Hello Red Hat!
+Hello Red Hat!
+Hello Red Hat!
+Hello World!
+Hello Red Hat!
+Hello World!
+Hello Red Hat!
+Hello Red Hat!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello Red Hat!
+Hello Red Hat!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello Red Hat!
+Hello World!
+Hello Red Hat!
+Hello Red Hat!
+Hello World!
+Hello Red Hat!
+Hello World!
+Hello World!
+Hello World!
+Hello Red Hat!
+Hello World!
+Hello World!
+Hello Red Hat!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello Red Hat!
+Hello World!
+Hello Red Hat!
+Hello World!
+Hello Red Hat!
+Hello Red Hat!
+
+
+#### Stats ####
+
+Total requests: 50
+* 'Hello World!' responses: 32 (64.0%)
+* 'Hello Red Hat!' responses: 18 (36.0%)
+* Errors: 0 (0.0%)
+root@controlplane:~/release-canary$ 
+root@controlplane:~$ 
+root@controlplane:~$ cat    gateway.yaml 
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: my-app-gateway
+spec:
+  selector:
+    istio: ingressgateway # Uses Istio's default ingress controller
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "myapp.example.com" # Replace with your actual domain or use "*"
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ kubectl  create  -f   gateway.yaml 
+gateway.networking.istio.io/my-app-gateway created
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ cat   dr.yaml 
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: my-app-destinationrule
+spec:
+  host: my-app-svc
+  subsets:
+  - name: v1
+    labels:
+      version: v1
+  - name: v2
+    labels:
+      version: v2
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ kubectl  create  -f   dr.yaml 
+destinationrule.networking.istio.io/my-app-destinationrule created
+root@controlplane:~$ 
+root@controlplane:~$ cat   vs.yaml 
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: my-app-virtualservice
+spec:
+  hosts:
+  - "myapp.example.com" # External host entry
+#  - my-app-svc          # Internal mesh host entry
+  gateways:
+  - my-app-gateway      # Binds this routing rule to the edge gateway
+#  - mesh                # Allows internal cluster-to-cluster traffic to respect the split
+  http:
+  - route:
+    - destination:
+        host: my-app-svc
+        subset: v1
+      weight: 90
+    - destination:
+        host: my-app-svc
+        subset: v2
+      weight: 10
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ kubectl  create   -f  vs.yaml 
+virtualservice.networking.istio.io/my-app-virtualservice created
+root@controlplane:~$ 
+
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ kubectl  get  gw,vs,dr
+NAME                                         AGE
+gateway.networking.istio.io/my-app-gateway   5m3s
+
+NAME                                                       GATEWAYS             HOSTS                   AGE
+virtualservice.networking.istio.io/my-app-virtualservice   ["my-app-gateway"]   ["myapp.example.com"]   2m45s
+
+NAME                                                         HOST         AGE
+destinationrule.networking.istio.io/my-app-destinationrule   my-app-svc   3m45s
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ cd -
+/root/release-canary
+root@controlplane:~/release-canary$ 
+root@controlplane:~/release-canary$ 
+root@controlplane:~/release-canary$ 
+
+root@controlplane:~/release-canary$ 
+root@controlplane:~/release-canary$ kubectl   get  svc  -n  istio-system 
+NAME                   TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)                                                                      AGE
+istio-egressgateway    ClusterIP   10.103.126.67    <none>        80/TCP,443/TCP                                                               8m54s
+istio-ingressgateway   NodePort    10.107.212.146   <none>        15021:32710/TCP,80:31924/TCP,443:31551/TCP,31400:31624/TCP,15443:31593/TCP   8m54s
+istiod                 ClusterIP   10.107.152.71    <none>        15010/TCP,15012/TCP,443/TCP,15014/TCP                                        9m19s
+root@controlplane:~/release-canary$ 
+root@controlplane:~/release-canary$ 
+root@controlplane:~/release-canary$ 
+root@controlplane:~/release-canary$ vim   /etc/hosts
+
+ 10.107.212.146  myapp.example.com
+
+:wq!
+root@controlplane:~/release-canary$ 
+root@controlplane:~/release-canary$ ./test_canary.py    myapp.example.com
+Canary Release Test
+Sending 50 requests to myapp.example.com ...
+
+
+Hello World!
+Hello Red Hat!
+Hello World!
+Hello World!
+Hello Red Hat!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello Red Hat!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello Red Hat!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+Hello World!
+
+
+#### Stats ####
+
+Total requests: 50
+* 'Hello World!' responses: 46 (92.0%)
+* 'Hello Red Hat!' responses: 4 (8.0%)
+* Errors: 0 (0.0%)
+root@controlplane:~/release-canary$ 
