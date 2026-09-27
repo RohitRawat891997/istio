@@ -1,0 +1,105 @@
+kubectl label namespace default istio-injection=enabled
+kubectl apply -f samples/bookinfo/platform/kube/bookinfo.yaml
+kubectl apply -f samples/bookinfo/networking/virtual-service-ratings-test-delay.yaml
+
+
+
+root@controlplane:~/istio-1.26.0$ 
+root@controlplane:~/istio-1.26.0$ 
+root@controlplane:~/istio-1.26.0$ kubectl  get   all
+NAME                                  READY   STATUS    RESTARTS   AGE
+pod/details-v1-6b47c8674f-78xlj       2/2     Running   0          31m
+pod/productpage-v1-5d9d7d6c86-f7xjt   2/2     Running   0          31m
+pod/ratings-v1-554f9d5d57-fr6x6       2/2     Running   0          31m
+pod/reviews-v1-7747d95d85-2nqjt       2/2     Running   0          31m
+pod/reviews-v2-57bbcdf465-hl9fq       2/2     Running   0          31m
+pod/reviews-v3-7ccf5446b5-bc85j       2/2     Running   0          31m
+
+NAME                  TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)    AGE
+service/details       ClusterIP   10.102.91.164    <none>        9080/TCP   31m
+service/kubernetes    ClusterIP   10.96.0.1        <none>        443/TCP    8d
+service/productpage   ClusterIP   10.100.204.167   <none>        9080/TCP   31m
+service/ratings       ClusterIP   10.107.132.111   <none>        9080/TCP   31m
+service/reviews       ClusterIP   10.104.207.59    <none>        9080/TCP   31m
+
+NAME                             READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/details-v1       1/1     1            1           31m
+deployment.apps/productpage-v1   1/1     1            1           31m
+deployment.apps/ratings-v1       1/1     1            1           31m
+deployment.apps/reviews-v1       1/1     1            1           31m
+deployment.apps/reviews-v2       1/1     1            1           31m
+deployment.apps/reviews-v3       1/1     1            1           31m
+
+NAME                                        DESIRED   CURRENT   READY   AGE
+replicaset.apps/details-v1-6b47c8674f       1         1         1       31m
+replicaset.apps/productpage-v1-5d9d7d6c86   1         1         1       31m
+replicaset.apps/ratings-v1-554f9d5d57       1         1         1       31m
+replicaset.apps/reviews-v1-7747d95d85       1         1         1       31m
+replicaset.apps/reviews-v2-57bbcdf465       1         1         1       31m
+replicaset.apps/reviews-v3-7ccf5446b5       1         1         1       31m
+root@controlplane:~/istio-1.26.0$ 
+root@controlplane:~/istio-1.26.0$ 
+root@controlplane:~/istio-1.26.0$ kubectl  get   gw bookinfo-gateway 
+NAME               AGE
+bookinfo-gateway   30m
+root@controlplane:~/istio-1.26.0$ 
+root@controlplane:~/istio-1.26.0$ kubectl  get   gw bookinfo-gateway  -o  yaml 
+apiVersion: networking.istio.io/v1
+kind: Gateway
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"networking.istio.io/v1","kind":"Gateway","metadata":{"annotations":{},"name":"bookinfo-gateway","namespace":"default"},"spec":{"selector":{"istio":"ingressgateway"},"servers":[{"hosts":["*"],"port":{"name":"http","number":8080,"protocol":"HTTP"}}]}}
+  creationTimestamp: "2026-09-27T19:05:52Z"
+  generation: 1
+  name: bookinfo-gateway
+  namespace: default
+  resourceVersion: "8604"
+  uid: d17345b5-7abc-4341-b24e-d67205d39351
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - hosts:
+    - '*'
+    port:
+      name: http
+      number: 8080
+      protocol: HTTP
+root@controlplane:~/istio-1.26.0$ 
+root@controlplane:~/istio-1.26.0$ kubectl  get  virtualservices                     
+NAME          GATEWAYS               HOSTS             AGE
+bookinfo      ["bookinfo-gateway"]   ["*"]             31m
+productpage                          ["productpage"]   8m12s
+ratings                              ["ratings"]       4m57s
+root@controlplane:~/istio-1.26.0$ 
+root@controlplane:~/istio-1.26.0$ 
+root@controlplane:~/istio-1.26.0$ 
+root@controlplane:~/istio-1.26.0$ kubectl  get  virtualservices  ratings   -o  yaml 
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  creationTimestamp: "2026-09-27T19:32:31Z"
+  generation: 1
+  name: ratings
+  namespace: default
+  resourceVersion: "12876"
+  uid: 2698d53a-432a-4544-b696-57383f70bee4
+spec:
+  hosts:
+  - ratings
+  http:
+  - fault:
+      abort:
+        httpStatus: 500
+        percentage:
+          value: 50
+    route:
+    - destination:
+        host: ratings
+        subset: v1
+root@controlplane:~/istio-1.26.0$ 
+root@controlplane:~/istio-1.26.0$ 
+
+
+
