@@ -1,3 +1,5 @@
+Lab-1: based on gui practical test
+
 kubectl label namespace default istio-injection=enabled
 kubectl apply -f samples/bookinfo/platform/kube/bookinfo.yaml
 kubectl apply -f samples/bookinfo/networking/virtual-service-ratings-test-delay.yaml
@@ -101,5 +103,219 @@ spec:
 root@controlplane:~/istio-1.26.0$ 
 root@controlplane:~/istio-1.26.0$ 
 
+=====================================================================================================
+Lab-2 : only based on cli practical example.
+
+root@controlplane:~$ cat   application.yaml 
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello
+spec:
+  selector:
+    matchLabels:
+      app: hello
+      version: v1
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: hello
+        version: v1
+      annotations:
+        sidecar.istio.io/inject: "true"
+    spec:
+      containers:
+        - name: hello
+          image: docker.io/rohitrawat891997/httpd:latest
+          command: ['sh', '-c', 'echo "Hello World" > /usr/local/apache2/htdocs/index.html && httpd-foreground']
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: hello
+  name: hello
+spec:
+  ports:
+    - name: http-8080
+      port: 8080
+      targetPort: 8080
+  selector:
+    app: hello
+
+---
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: hello-gateway
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "foo.example.com"
+
+---
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: hello
+spec:
+  hosts:
+  - foo.example.com
+  gateways:
+  - hello-gateway
+
+  http:
+  - fault:
+      abort:
+        percentage:
+          value: 50
+        httpStatus: 500
+
+    route:
+    - destination:
+        host: hello
+        port:
+          number: 8080
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ kubectl  create  -f   application.yaml 
+deployment.apps/hello created
+service/hello created
+gateway.networking.istio.io/hello-gateway created
+virtualservice.networking.istio.io/hello created
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ kubectl  get  pod,svc,gw,vs
+NAME                        READY   STATUS    RESTARTS   AGE
+pod/hello-78c6844f6-rz748   2/2     Running   0          48s
+
+NAME                 TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
+service/hello        ClusterIP   10.101.53.242   <none>        8080/TCP   48s
+service/kubernetes   ClusterIP   10.96.0.1       <none>        443/TCP    8d
+
+NAME                                        AGE
+gateway.networking.istio.io/hello-gateway   48s
+
+NAME                                       GATEWAYS            HOSTS                 AGE
+virtualservice.networking.istio.io/hello   ["hello-gateway"]   ["foo.example.com"]   48s
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ 
+
+root@controlplane:~$ 
+root@controlplane:~$ kubectl  get   svc  -n istio-system 
+NAME                   TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)                                                                      AGE
+istio-egressgateway    ClusterIP   10.101.11.235    <none>        80/TCP,443/TCP                                                               4m16s
+istio-ingressgateway   NodePort    10.109.230.115   <none>        15021:31306/TCP,80:32015/TCP,443:31342/TCP,31400:31161/TCP,15443:32432/TCP   4m16s
+istiod                 ClusterIP   10.107.193.33    <none>        15010/TCP,15012/TCP,443/TCP,15014/TCP                                        4m36s
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ vim   /etc/hosts
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ cat    /etc/hosts
+
+10.109.230.115  foo.example.com
+
+:wq!
+
+root@controlplane:~$ 
+root@controlplane:~$ 
+
+root@controlplane:~$ 
+root@controlplane:~$ for  i  in   {1..10}; do curl -I http://foo.example.com; done
+HTTP/1.1 500 Internal Server Error
+content-length: 18
+content-type: text/plain
+date: Mon, 28 Sep 2026 03:25:47 GMT
+server: istio-envoy
+
+HTTP/1.1 500 Internal Server Error
+content-length: 18
+content-type: text/plain
+date: Mon, 28 Sep 2026 03:25:47 GMT
+server: istio-envoy
+
+HTTP/1.1 200 OK
+date: Mon, 28 Sep 2026 03:25:48 GMT
+server: istio-envoy
+last-modified: Mon, 28 Sep 2026 03:21:20 GMT
+etag: "c-65c828f528554"
+accept-ranges: bytes
+content-length: 12
+content-type: text/html
+x-envoy-upstream-service-time: 0
+
+HTTP/1.1 500 Internal Server Error
+content-length: 18
+content-type: text/plain
+date: Mon, 28 Sep 2026 03:25:47 GMT
+server: istio-envoy
+
+HTTP/1.1 500 Internal Server Error
+content-length: 18
+content-type: text/plain
+date: Mon, 28 Sep 2026 03:25:47 GMT
+server: istio-envoy
+
+HTTP/1.1 200 OK
+date: Mon, 28 Sep 2026 03:25:48 GMT
+server: istio-envoy
+last-modified: Mon, 28 Sep 2026 03:21:20 GMT
+etag: "c-65c828f528554"
+accept-ranges: bytes
+content-length: 12
+content-type: text/html
+x-envoy-upstream-service-time: 0
+
+HTTP/1.1 500 Internal Server Error
+content-length: 18
+content-type: text/plain
+date: Mon, 28 Sep 2026 03:25:48 GMT
+server: istio-envoy
+
+HTTP/1.1 200 OK
+date: Mon, 28 Sep 2026 03:25:48 GMT
+server: istio-envoy
+last-modified: Mon, 28 Sep 2026 03:21:20 GMT
+etag: "c-65c828f528554"
+accept-ranges: bytes
+content-length: 12
+content-type: text/html
+x-envoy-upstream-service-time: 0
+
+HTTP/1.1 200 OK
+date: Mon, 28 Sep 2026 03:25:48 GMT
+server: istio-envoy
+last-modified: Mon, 28 Sep 2026 03:21:20 GMT
+etag: "c-65c828f528554"
+accept-ranges: bytes
+content-length: 12
+content-type: text/html
+x-envoy-upstream-service-time: 0
+
+HTTP/1.1 500 Internal Server Error
+content-length: 18
+content-type: text/plain
+date: Mon, 28 Sep 2026 03:25:48 GMT
+server: istio-envoy
+
+root@controlplane:~$ 
+root@controlplane:~$ 
+root@controlplane:~$ 
 
 
