@@ -224,10 +224,6 @@ istiod                 ClusterIP   10.107.193.33    <none>        15010/TCP,1501
 root@controlplane:~$ 
 root@controlplane:~$ 
 root@controlplane:~$ vim   /etc/hosts
-root@controlplane:~$ 
-root@controlplane:~$ 
-root@controlplane:~$ 
-root@controlplane:~$ cat    /etc/hosts
 
 10.109.230.115  foo.example.com
 
