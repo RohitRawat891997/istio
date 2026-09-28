@@ -1,339 +1,308 @@
+# Lab 02: Gateway + VirtualService traffic flow
 
-#### Example of destination rules traffic flow ####
+This lab explains how requests enter the mesh through an Istio Gateway and are then routed to a service using a VirtualService.
 
-client----myapp.example.com----istio-gateway(gw)----virtualService(vs)----destination rule(dr)----service(my-app-svc)-----subset: v1 90% /subset: v2 10%
+## Goal
 
-root@controlplane:~$ 
-root@controlplane:~$ cat  application.yaml 
+Learn how to:
+- deploy an app in a namespace
+- enable sidecar injection
+- create a Gateway
+- create a VirtualService
+- route traffic from the ingress gateway to the application
+- verify the flow using curl and kubectl
+
+## Traffic flow diagram
+
+client --> Gateway --> VirtualService --> Service --> Pod
+
+This is the basic pattern for incoming traffic in Istio.
+
+## Step 1: Create a namespace and enable Istio injection
+
+```bash
+kubectl create ns hello
+kubectl label ns hello istio-injection=enabled
+```
+
+What this command does:
+- `kubectl create ns hello` creates a new Kubernetes namespace named `hello`.
+- `kubectl label ns hello istio-injection=enabled` tells Istio to inject sidecars into workloads in this namespace.
+
+Expected result:
+- Namespace is created successfully.
+- The namespace is labeled so future pods receive sidecars automatically.
+
+Troubleshooting:
+- If the namespace already exists, use `kubectl get ns` and delete or reuse it as needed.
+- If injection is not happening, confirm the Istio sidecar injector is installed and working in your cluster.
+
+## Step 2: Deploy the application
+
+Create `application.yaml` with the following content:
+
+```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: my-app-v1
-  labels:
-    app: my-app
-    version: v1
+  name: hello
 spec:
-  replicas: 2
   selector:
     matchLabels:
-      app: my-app
-      version: v1
-  template:
-    metadata:
-      labels:
-        app: my-app
-        version: v1
-    spec:
-      containers:
-      - name: app
-        image: docker.io/rohitrawat891997/httpd:latest  # Replace with your v1 image
-        command: ['sh', '-c', 'echo "Hello World!" > /usr/local/apache2/htdocs/index.html && httpd-foreground']
-        ports:
-        - containerPort: 8080
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-app-v2
-  labels:
-    app: my-app
-    version: v2
-spec:
+      app: hello
   replicas: 1
-  selector:
-    matchLabels:
-      app: my-app
-      version: v2
   template:
     metadata:
       labels:
-        app: my-app
-        version: v2
+        app: hello
+      annotations:
+        sidecar.istio.io/inject: "true"
     spec:
       containers:
-      - name: app
-        image: docker.io/rohitrawat891997/httpd:latest  # Replace with your v2 image
-        command: ['sh', '-c', 'echo "Hello Red Hat!" > /usr/local/apache2/htdocs/index.html && httpd-foreground']
-        ports:
-        - containerPort: 8080
-
+        - name: hello
+          image: docker.io/rohitrawat891997/httpd:latest
+          command: ['sh', '-c', 'echo "Hello World" > /usr/local/apache2/htdocs/index.html && httpd-foreground']
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: my-app-svc
   labels:
-    app: my-app
+    app: hello
+  name: hello
 spec:
   ports:
-  - port: 8080
-    name: http
-    targetPort: 8080
+    - name: http-8080
+      port: 8080
+      targetPort: 8080
   selector:
-    app: my-app # Routes to all pods labeled app: my-app regardless of version
-root@controlplane:~$ 
-root@controlplane:~$ kubectl  create  -f   application.yaml 
-deployment.apps/my-app-v1 created
-deployment.apps/my-app-v2 created
-service/my-app-svc created
-root@controlplane:~$ 
-root@controlplane:~$ 
-root@controlplane:~$ 
-root@controlplane:~$ 
-root@controlplane:~$ 
-root@controlplane:~$ kubectl get  all
-NAME                             READY   STATUS    RESTARTS   AGE
-pod/my-app-v1-9b75b8c5b-k9p5g    2/2     Running   0          13m
-pod/my-app-v1-9b75b8c5b-smxt9    2/2     Running   0          13m
-pod/my-app-v2-5d7c484b79-2qns6   2/2     Running   0          13m
+    app: hello
+```
 
-NAME                 TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)    AGE
-service/kubernetes   ClusterIP   10.96.0.1     <none>        443/TCP    6d10h
-service/my-app-svc   ClusterIP   10.96.11.24   <none>        8080/TCP   13m
+Apply it:
 
-NAME                        READY   UP-TO-DATE   AVAILABLE   AGE
-deployment.apps/my-app-v1   2/2     2            2           13m
-deployment.apps/my-app-v2   1/1     1            1           13m
+```bash
+kubectl create -f application.yaml -n hello
+```
 
-NAME                                   DESIRED   CURRENT   READY   AGE
-replicaset.apps/my-app-v1-9b75b8c5b    2         2         2       13m
-replicaset.apps/my-app-v2-5d7c484b79   1         1         1       13m
-root@controlplane:~$ 
-root@controlplane:~$ cd  release-canary/
-root@controlplane:~/release-canary$ 
-root@controlplane:~/release-canary$ ls
-deployment-v1.yaml  destination-rule.yaml  gateway.yaml  service.yaml  test_canary.py  virtual-service.yaml
-root@controlplane:~/release-canary$ 
-root@controlplane:~/release-canary$ ./test_canary.py 10.96.11.24:8080
-Canary Release Test
-Sending 50 requests to 10.96.191.86:8080 ...
+What this command does:
+- Creates a Deployment named `hello`.
+- Starts one pod running an Apache HTTPD container.
+- Uses the container image from Docker Hub.
+- Exposes port `8080` inside the cluster.
+- Creates a Service named `hello` that selects pods with label `app: hello`.
 
+Expected result:
+- Deployment is created.
+- Service is created.
+- Pod starts and becomes Ready.
 
-Hello Red Hat!
-Hello Red Hat!
-Hello Red Hat!
-Hello World!
-Hello Red Hat!
-Hello World!
-Hello Red Hat!
-Hello Red Hat!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello Red Hat!
-Hello Red Hat!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello Red Hat!
-Hello World!
-Hello Red Hat!
-Hello Red Hat!
-Hello World!
-Hello Red Hat!
-Hello World!
-Hello World!
-Hello World!
-Hello Red Hat!
-Hello World!
-Hello World!
-Hello Red Hat!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello Red Hat!
-Hello World!
-Hello Red Hat!
-Hello World!
-Hello Red Hat!
-Hello Red Hat!
+Troubleshooting:
+- If the pod stays in `Pending` or `CrashLoopBackOff`, check the pod events and container logs.
+- Ensure the image is accessible and the command can run in the container.
 
+## Step 3: Create the Gateway
 
-#### Stats ####
+Create `gateway.yaml`:
 
-Total requests: 50
-* 'Hello World!' responses: 32 (64.0%)
-* 'Hello Red Hat!' responses: 18 (36.0%)
-* Errors: 0 (0.0%)
-root@controlplane:~/release-canary$ 
-root@controlplane:~$ 
-root@controlplane:~$ cat    gateway.yaml 
-apiVersion: networking.istio.io/v1alpha3
+```yaml
+apiVersion: networking.istio.io/v1beta1
 kind: Gateway
 metadata:
-  name: my-app-gateway
+  name: hello-gateway
 spec:
   selector:
-    istio: ingressgateway # Uses Istio's default ingress controller
+    istio: ingressgateway
   servers:
-  - port:
-      number: 80
-      name: http
-      protocol: HTTP
-    hosts:
-    - "myapp.example.com" # Replace with your actual domain or use "*"
-root@controlplane:~$ 
-root@controlplane:~$ 
-root@controlplane:~$ kubectl  create  -f   gateway.yaml 
-gateway.networking.istio.io/my-app-gateway created
-root@controlplane:~$ 
-root@controlplane:~$ 
-root@controlplane:~$ 
-root@controlplane:~$ cat   dr.yaml 
-apiVersion: networking.istio.io/v1
-kind: DestinationRule
-metadata:
-  name: my-app-destinationrule
-spec:
-  host: my-app-svc
-  subsets:
-  - name: v1
-    labels:
-      version: v1
-  - name: v2
-    labels:
-      version: v2
-root@controlplane:~$ 
-root@controlplane:~$ 
-root@controlplane:~$ kubectl  create  -f   dr.yaml 
-destinationrule.networking.istio.io/my-app-destinationrule created
-root@controlplane:~$ 
-root@controlplane:~$ cat   vs.yaml 
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "foo.example.com"
+```
+
+Apply it:
+
+```bash
+kubectl create -f gateway.yaml -n hello
+```
+
+What this command does:
+- Defines an Istio ingress Gateway.
+- Selects the Istio ingress gateway pods (`istio: ingressgateway`).
+- Accepts HTTP traffic on port 80.
+- Routes traffic for host `foo.example.com`.
+
+Expected result:
+- The Gateway resource appears in the namespace.
+
+Troubleshooting:
+- If the Gateway is created but traffic does not arrive, check whether the ingress gateway service is running in `istio-system`.
+- Confirm the `selector` matches the actual ingress gateway pod labels.
+
+## Step 4: Create the VirtualService
+
+Create `virtual-service.yaml`:
+
+```yaml
 apiVersion: networking.istio.io/v1
 kind: VirtualService
 metadata:
-  name: my-app-virtualservice
+  name: hello-vs
 spec:
   hosts:
-  - "myapp.example.com" # External host entry
-#  - my-app-svc          # Internal mesh host entry
+  - "foo.example.com"
   gateways:
-  - my-app-gateway      # Binds this routing rule to the edge gateway
-#  - mesh                # Allows internal cluster-to-cluster traffic to respect the split
+  - hello-gateway
   http:
   - route:
     - destination:
-        host: my-app-svc
-        subset: v1
-      weight: 90
-    - destination:
-        host: my-app-svc
-        subset: v2
-      weight: 10
-root@controlplane:~$ 
-root@controlplane:~$ 
-root@controlplane:~$ kubectl  create   -f  vs.yaml 
-virtualservice.networking.istio.io/my-app-virtualservice created
-root@controlplane:~$ 
+        host: hello.hello.svc.cluster.local
+        port:
+          number: 8080
+```
 
-root@controlplane:~$ 
-root@controlplane:~$ 
-root@controlplane:~$ kubectl  get  gw,vs,dr
-NAME                                         AGE
-gateway.networking.istio.io/my-app-gateway   5m3s
+Apply it:
 
-NAME                                                       GATEWAYS             HOSTS                   AGE
-virtualservice.networking.istio.io/my-app-virtualservice   ["my-app-gateway"]   ["myapp.example.com"]   2m45s
+```bash
+kubectl create -f virtual-service.yaml -n hello
+```
 
-NAME                                                         HOST         AGE
-destinationrule.networking.istio.io/my-app-destinationrule   my-app-svc   3m45s
-root@controlplane:~$ 
-root@controlplane:~$ 
-root@controlplane:~$ 
-root@controlplane:~$ cd -
-/root/release-canary
-root@controlplane:~/release-canary$ 
-root@controlplane:~/release-canary$ 
-root@controlplane:~/release-canary$ 
+What this command does:
+- Matches requests for `foo.example.com`.
+- Sends those requests to the `hello` Kubernetes Service inside the `hello` namespace.
+- Routes to the application on port `8080`.
 
-root@controlplane:~/release-canary$ 
-root@controlplane:~/release-canary$ kubectl   get  svc  -n  istio-system 
-NAME                   TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)                                                                      AGE
-istio-egressgateway    ClusterIP   10.103.126.67    <none>        80/TCP,443/TCP                                                               8m54s
-istio-ingressgateway   NodePort    10.107.212.146   <none>        15021:32710/TCP,80:31924/TCP,443:31551/TCP,31400:31624/TCP,15443:31593/TCP   8m54s
-istiod                 ClusterIP   10.107.152.71    <none>        15010/TCP,15012/TCP,443/TCP,15014/TCP                                        9m19s
-root@controlplane:~/release-canary$ 
-root@controlplane:~/release-canary$ 
-root@controlplane:~/release-canary$ 
-root@controlplane:~/release-canary$ vim   /etc/hosts
+Expected result:
+- A VirtualService is created.
+- It is bound to the `hello-gateway`.
 
- 10.107.212.146  myapp.example.com
+Troubleshooting:
+- If the host does not match, curl will not reach the backend.
+- Verify the destination host is correct: `hello.hello.svc.cluster.local`.
 
-:wq!
-root@controlplane:~/release-canary$ 
-root@controlplane:~/release-canary$ ./test_canary.py    myapp.example.com
-Canary Release Test
-Sending 50 requests to myapp.example.com ...
+## Step 5: Check ingress gateway service and host mapping
 
+```bash
+kubectl get svc -n istio-system
+```
 
-Hello World!
-Hello Red Hat!
-Hello World!
-Hello World!
-Hello Red Hat!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello Red Hat!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello Red Hat!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
-Hello World!
+What this command does:
+- Lists all services in the `istio-system` namespace.
+- Shows the Istio ingress gateway `NodePort` or ClusterIP details.
 
+Expected result:
+- You should see `istio-ingressgateway` and its exposed ports.
 
-#### Stats ####
+Then add an entry to `/etc/hosts`:
 
-Total requests: 50
-* 'Hello World!' responses: 46 (92.0%)
-* 'Hello Red Hat!' responses: 4 (8.0%)
-* Errors: 0 (0.0%)
-root@controlplane:~/release-canary$ 
+```bash
+vim /etc/hosts
+10.97.132.26   foo.example.com
+```
+
+What this command does:
+- Maps `foo.example.com` to the ingress gateway IP.
+- Lets your machine route requests to the Istio ingress gateway.
+
+Expected result:
+- The hostname resolves locally to the ingress gateway.
+
+Troubleshooting:
+- If curl does not work, check whether the ingress gateway IP changed.
+- Use `kubectl get svc -n istio-system` again to see the current IP/NodePort.
+
+## Step 6: Test the route
+
+```bash
+curl foo.example.com
+```
+
+Expected output:
+
+```text
+Hello World
+```
+
+What this command does:
+- Sends an HTTP request to `foo.example.com`.
+- The request passes through the ingress gateway.
+- The Gateway forwards the request to the VirtualService.
+- The VirtualService sends it to the `hello` service.
+- The app responds with the content stored in the HTML page.
+
+Troubleshooting:
+- If you get connection refused or timeout, confirm the ingress gateway is running and `/etc/hosts` is correct.
+- If you get a 404 or no response, verify the Gateway and VirtualService definitions and host names.
+
+## Step 7: Verify the resources
+
+```bash
+kubectl get po,svc -n hello
+kubectl get gw,vs -n hello
+```
+
+What this command does:
+- Confirms the application pod and service are running.
+- Confirms the Gateway and VirtualService resources were created.
+
+Expected result:
+- Pod shows `Running` and Ready state.
+- Gateway and VirtualService exist and match `foo.example.com`.
+
+## Summary
+
+This lab demonstrates the simplest Istio ingress flow:
+- Kubernetes app is deployed
+- Gateway exposes traffic to the mesh
+- VirtualService directs requests to the right backend service
+- curl verifies the end-to-end path
+
+This is the foundation for more advanced traffic routing, such as weighted routing, header-based routing, and fault injection.
+
+## Common beginner mistakes
+
+- Forgetting to label the namespace for injection
+- Routing to the wrong host name
+- Wrong service port or selector
+- Not updating `/etc/hosts`
+- Using the wrong gateway selector
+
+## Final command set
+
+```bash
+kubectl create ns hello
+kubectl label ns hello istio-injection=enabled
+kubectl create -f application.yaml -n hello
+kubectl create -f gateway.yaml -n hello
+kubectl create -f virtual-service.yaml -n hello
+kubectl get svc -n istio-system
+vim /etc/hosts
+curl foo.example.com
+```
+
+This lab is complete when the request to `foo.example.com` returns `Hello World`.
+
+---
+
+Original command log kept for reference:
+
+```bash
+root@controlplane:~/traffic-deploy$ kubectl create ns hello
+root@controlplane:~/traffic-deploy$ kubectl label ns hello istio-injection=enabled
+root@controlplane:~/traffic-deploy$ kubectl create -f application.yaml -n hello
+root@controlplane:~/traffic-deploy$ kubectl create -f gateway.yaml -n hello
+root@controlplane:~/traffic-deploy$ kubectl create -f virtual-service.yaml -n hello
+root@controlplane:~$ kubectl get svc -n istio-system
+root@controlplane:~$ vim /etc/hosts
+10.97.132.26   foo.example.com
+root@controlplane:~$ curl foo.example.com
+Hello World
+```
+
+"""
+
+},{

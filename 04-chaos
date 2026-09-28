@@ -1,134 +1,81 @@
-Lab-1: based on gui practical test
+# Lab 03-DR-2: Header-based routing and canary release
 
-kubectl label namespace default istio-injection=enabled
-kubectl apply -f samples/bookinfo/platform/kube/bookinfo.yaml
-kubectl apply -f samples/bookinfo/networking/virtual-service-ratings-test-delay.yaml
+This lab covers traffic routing based on request headers and subset selection in Istio.
 
+## Goal
 
+Learn how to:
+- deploy two versions of the same app
+- create a Service and Gateway
+- route traffic based on URI and HTTP headers
+- use DestinationRule subsets for version selection
+- understand canary behavior in a simple practical setup
 
-root@controlplane:~/istio-1.26.0$ 
-root@controlplane:~/istio-1.26.0$ 
-root@controlplane:~/istio-1.26.0$ kubectl  get   all
-NAME                                  READY   STATUS    RESTARTS   AGE
-pod/details-v1-6b47c8674f-78xlj       2/2     Running   0          31m
-pod/productpage-v1-5d9d7d6c86-f7xjt   2/2     Running   0          31m
-pod/ratings-v1-554f9d5d57-fr6x6       2/2     Running   0          31m
-pod/reviews-v1-7747d95d85-2nqjt       2/2     Running   0          31m
-pod/reviews-v2-57bbcdf465-hl9fq       2/2     Running   0          31m
-pod/reviews-v3-7ccf5446b5-bc85j       2/2     Running   0          31m
+## Lab 1: Without DestinationRule
 
-NAME                  TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)    AGE
-service/details       ClusterIP   10.102.91.164    <none>        9080/TCP   31m
-service/kubernetes    ClusterIP   10.96.0.1        <none>        443/TCP    8d
-service/productpage   ClusterIP   10.100.204.167   <none>        9080/TCP   31m
-service/ratings       ClusterIP   10.107.132.111   <none>        9080/TCP   31m
-service/reviews       ClusterIP   10.104.207.59    <none>        9080/TCP   31m
+### Step 1: Create the application
 
-NAME                             READY   UP-TO-DATE   AVAILABLE   AGE
-deployment.apps/details-v1       1/1     1            1           31m
-deployment.apps/productpage-v1   1/1     1            1           31m
-deployment.apps/ratings-v1       1/1     1            1           31m
-deployment.apps/reviews-v1       1/1     1            1           31m
-deployment.apps/reviews-v2       1/1     1            1           31m
-deployment.apps/reviews-v3       1/1     1            1           31m
-
-NAME                                        DESIRED   CURRENT   READY   AGE
-replicaset.apps/details-v1-6b47c8674f       1         1         1       31m
-replicaset.apps/productpage-v1-5d9d7d6c86   1         1         1       31m
-replicaset.apps/ratings-v1-554f9d5d57       1         1         1       31m
-replicaset.apps/reviews-v1-7747d95d85       1         1         1       31m
-replicaset.apps/reviews-v2-57bbcdf465       1         1         1       31m
-replicaset.apps/reviews-v3-7ccf5446b5       1         1         1       31m
-root@controlplane:~/istio-1.26.0$ 
-root@controlplane:~/istio-1.26.0$ 
-root@controlplane:~/istio-1.26.0$ kubectl  get   gw bookinfo-gateway 
-NAME               AGE
-bookinfo-gateway   30m
-root@controlplane:~/istio-1.26.0$ 
-root@controlplane:~/istio-1.26.0$ kubectl  get   gw bookinfo-gateway  -o  yaml 
-apiVersion: networking.istio.io/v1
-kind: Gateway
-metadata:
-  annotations:
-    kubectl.kubernetes.io/last-applied-configuration: |
-      {"apiVersion":"networking.istio.io/v1","kind":"Gateway","metadata":{"annotations":{},"name":"bookinfo-gateway","namespace":"default"},"spec":{"selector":{"istio":"ingressgateway"},"servers":[{"hosts":["*"],"port":{"name":"http","number":8080,"protocol":"HTTP"}}]}}
-  creationTimestamp: "2026-09-27T19:05:52Z"
-  generation: 1
-  name: bookinfo-gateway
-  namespace: default
-  resourceVersion: "8604"
-  uid: d17345b5-7abc-4341-b24e-d67205d39351
-spec:
-  selector:
-    istio: ingressgateway
-  servers:
-  - hosts:
-    - '*'
-    port:
-      name: http
-      number: 8080
-      protocol: HTTP
-root@controlplane:~/istio-1.26.0$ 
-root@controlplane:~/istio-1.26.0$ kubectl  get  virtualservices                     
-NAME          GATEWAYS               HOSTS             AGE
-bookinfo      ["bookinfo-gateway"]   ["*"]             31m
-productpage                          ["productpage"]   8m12s
-ratings                              ["ratings"]       4m57s
-root@controlplane:~/istio-1.26.0$ 
-root@controlplane:~/istio-1.26.0$ 
-root@controlplane:~/istio-1.26.0$ 
-root@controlplane:~/istio-1.26.0$ kubectl  get  virtualservices  ratings   -o  yaml 
-apiVersion: networking.istio.io/v1
-kind: VirtualService
-metadata:
-  creationTimestamp: "2026-09-27T19:32:31Z"
-  generation: 1
-  name: ratings
-  namespace: default
-  resourceVersion: "12876"
-  uid: 2698d53a-432a-4544-b696-57383f70bee4
-spec:
-  hosts:
-  - ratings
-  http:
-  - fault:
-      abort:
-        httpStatus: 500
-        percentage:
-          value: 50
-    route:
-    - destination:
-        host: ratings
-        subset: v1
-root@controlplane:~/istio-1.26.0$ 
-root@controlplane:~/istio-1.26.0$ 
-
-=====================================================================================================
-Lab-2 : only based on cli practical example.
-
-root@controlplane:~$ cat   application.yaml 
+```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: hello
+  name: headers-v1
+  labels:
+    app: headers
+    version: v1
 spec:
   selector:
     matchLabels:
-      app: hello
+      app: headers
       version: v1
   replicas: 1
   template:
     metadata:
       labels:
-        app: hello
+        app: headers
         version: v1
       annotations:
         sidecar.istio.io/inject: "true"
     spec:
       containers:
-        - name: hello
+        - name: headers
           image: docker.io/rohitrawat891997/httpd:latest
-          command: ['sh', '-c', 'echo "Hello World" > /usr/local/apache2/htdocs/index.html && httpd-foreground']
+          command:
+            - 'sh'
+            - '-c'
+            - 'echo "Hello World!" > /usr/local/apache2/htdocs/index.html && httpd-foreground'
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: headers-v2
+  labels:
+    app: headers
+    version: v2
+spec:
+  selector:
+    matchLabels:
+      app: headers
+      version: v2
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: headers
+        version: v2
+      annotations:
+        sidecar.istio.io/inject: "true"
+    spec:
+      containers:
+        - name: headers
+          image: docker.io/rohitrawat891997/httpd:latest
+          command:
+            - 'sh'
+            - '-c'
+            - ' echo "Hello Red Hat!" > /usr/local/apache2/htdocs/index.html && httpd-foreground'
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
@@ -137,21 +84,19 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
-    app: hello
-  name: hello
+    app: headers
+  name: headers
 spec:
   ports:
-    - name: http-8080
+    - name: http
       port: 8080
-      targetPort: 8080
   selector:
-    app: hello
-
+    app: headers
 ---
 apiVersion: networking.istio.io/v1beta1
 kind: Gateway
 metadata:
-  name: hello-gateway
+  name: headers-gateway
 spec:
   selector:
     istio: ingressgateway
@@ -161,157 +106,210 @@ spec:
         name: http
         protocol: HTTP
       hosts:
-        - "foo.example.com"
-
+        - "*"
 ---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: headers-vs
+spec:
+  hosts:
+    - "*"
+  gateways:
+    - headers-gateway
+  http:
+    - match:
+        - uri:
+            prefix: /headers
+      rewrite:
+        uri: /
+      route:
+        - destination:
+            host: headers
+            port:
+              number: 8080
+```
+
+Apply it:
+
+```bash
+kubectl create -f application.yaml
+```
+
+What this command does:
+- creates two app versions with different output messages
+- exposes them through a Service named `headers`
+- sets a VirtualService that rewrites `/headers` to `/`
+- sends all matching traffic to the base `headers` Service
+
+Expected result:
+- both versions are reachable and responses alternate randomly
+
+Run the canary test:
+
+```bash
+./release-canary/test_canary.py foo.example.com/headers
+```
+
+Example expected output:
+
+```text
+Total requests: 50
+* 'Hello World!' responses: 21 (42.0%)
+* 'Hello Red Hat!' responses: 29 (57.99999999999999%)
+* Errors: 0 (0.0%)
+```
+
+This shows no explicit version routing; traffic is split naturally across both pods.
+
+## Lab 2: Route all traffic to the v1 subset
+
+This version adds a `DestinationRule` and subsets.
+
+```yaml
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: headers-vs
+spec:
+  hosts:
+    - "*"
+  gateways:
+    - headers-gateway
+  http:
+    - match:
+        - uri:
+            prefix: /headers
+      route:
+        - destination:
+            host: headers
+            subset: alpha
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: headers
+spec:
+  host: headers
+  subsets:
+  - name: alpha
+    labels:
+      version: v1
+  - name: beta
+    labels:
+      version: v2
+```
+
+What this command does:
+- `subset: alpha` sends traffic only to version v1
+- `DestinationRule` maps subset names to pod labels
+
+Expected output after testing:
+
+```text
+Total requests: 50
+* 'Hello World!' responses: 50 (100.0%)
+* Errors: 0 (0.0%)
+```
+
+## Lab 3: Route based on HTTP header condition
+
+This introduces request matching based on a header such as `end-user: redhatter`.
+
+```yaml
 apiVersion: networking.istio.io/v1
 kind: VirtualService
 metadata:
-  name: hello
+  name: headers-vs
 spec:
   hosts:
-  - foo.example.com
+    - "*"
   gateways:
-  - hello-gateway
-
+    - headers-gateway
   http:
-  - fault:
-      abort:
-        percentage:
-          value: 50
-        httpStatus: 500
+    - match:
+        - uri:
+            prefix: /headers
+          headers:
+            end-user:
+              exact: redhatter
+      route:
+        - destination:
+            host: headers
+            subset: beta
+            port:
+              number: 8080
+    - match:
+        - uri:
+            prefix: /headers
+      route:
+        - destination:
+            host: headers
+            subset: alpha
+            port:
+              number: 8080
+```
 
-    route:
-    - destination:
-        host: hello
-        port:
-          number: 8080
-root@controlplane:~$ 
-root@controlplane:~$ 
-root@controlplane:~$ 
-root@controlplane:~$ kubectl  create  -f   application.yaml 
-deployment.apps/hello created
-service/hello created
-gateway.networking.istio.io/hello-gateway created
-virtualservice.networking.istio.io/hello created
-root@controlplane:~$ 
-root@controlplane:~$ 
-root@controlplane:~$ 
-root@controlplane:~$ kubectl  get  pod,svc,gw,vs
-NAME                        READY   STATUS    RESTARTS   AGE
-pod/hello-78c6844f6-rz748   2/2     Running   0          48s
+What this command does:
+- if the request includes header `end-user: redhatter`, route to `beta` (v2)
+- otherwise, route to `alpha` (v1)
 
-NAME                 TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
-service/hello        ClusterIP   10.101.53.242   <none>        8080/TCP   48s
-service/kubernetes   ClusterIP   10.96.0.1       <none>        443/TCP    8d
+Test it with:
 
-NAME                                        AGE
-gateway.networking.istio.io/hello-gateway   48s
+```bash
+curl foo.example.com/headers
+curl -s -H "end-user: redhatter" foo.example.com/headers
+```
 
-NAME                                       GATEWAYS            HOSTS                 AGE
-virtualservice.networking.istio.io/hello   ["hello-gateway"]   ["foo.example.com"]   48s
-root@controlplane:~$ 
-root@controlplane:~$ 
-root@controlplane:~$ 
-root@controlplane:~$ 
+Expected output:
 
-root@controlplane:~$ 
-root@controlplane:~$ kubectl  get   svc  -n istio-system 
-NAME                   TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)                                                                      AGE
-istio-egressgateway    ClusterIP   10.101.11.235    <none>        80/TCP,443/TCP                                                               4m16s
-istio-ingressgateway   NodePort    10.109.230.115   <none>        15021:31306/TCP,80:32015/TCP,443:31342/TCP,31400:31161/TCP,15443:32432/TCP   4m16s
-istiod                 ClusterIP   10.107.193.33    <none>        15010/TCP,15012/TCP,443/TCP,15014/TCP                                        4m36s
-root@controlplane:~$ 
-root@controlplane:~$ 
-root@controlplane:~$ vim   /etc/hosts
+```text
+Hello World!
+Hello Red Hat!
+```
 
-10.109.230.115  foo.example.com
+Troubleshooting tips:
+- If header matching does not work, ensure the header name matches exactly (`end-user`)
+- If you get the same response both times, check that the VirtualService is applied correctly
+- Use `kubectl get gw,vs,dr` to verify the config
 
-:wq!
+## Useful beginner notes
 
-root@controlplane:~$ 
-root@controlplane:~$ 
+- A `match` block filters requests before routing
+- `headers` matching works with conditions like `exact`, `prefix`, or `regex`
+- `DestinationRule` is required when you want to target subsets by version
+- `Gateway` handles ingress traffic, `VirtualService` decides where to send it
 
-root@controlplane:~$ 
-root@controlplane:~$ for  i  in   {1..10}; do curl -I http://foo.example.com; done
-HTTP/1.1 500 Internal Server Error
-content-length: 18
-content-type: text/plain
-date: Mon, 28 Sep 2026 03:25:47 GMT
-server: istio-envoy
+## Summary
 
-HTTP/1.1 500 Internal Server Error
-content-length: 18
-content-type: text/plain
-date: Mon, 28 Sep 2026 03:25:47 GMT
-server: istio-envoy
+This lab teaches three important routing ideas:
+1. route traffic without a rule and see normal distribution
+2. route all traffic to a single version using subsets
+3. choose a version based on HTTP request headers
 
-HTTP/1.1 200 OK
-date: Mon, 28 Sep 2026 03:25:48 GMT
-server: istio-envoy
-last-modified: Mon, 28 Sep 2026 03:21:20 GMT
-etag: "c-65c828f528554"
-accept-ranges: bytes
-content-length: 12
-content-type: text/html
-x-envoy-upstream-service-time: 0
+That is a real-world pattern for dark launches, canary releases, and user-based targeting.
 
-HTTP/1.1 500 Internal Server Error
-content-length: 18
-content-type: text/plain
-date: Mon, 28 Sep 2026 03:25:47 GMT
-server: istio-envoy
+---
 
-HTTP/1.1 500 Internal Server Error
-content-length: 18
-content-type: text/plain
-date: Mon, 28 Sep 2026 03:25:47 GMT
-server: istio-envoy
+Original practical examples:
 
-HTTP/1.1 200 OK
-date: Mon, 28 Sep 2026 03:25:48 GMT
-server: istio-envoy
-last-modified: Mon, 28 Sep 2026 03:21:20 GMT
-etag: "c-65c828f528554"
-accept-ranges: bytes
-content-length: 12
-content-type: text/html
-x-envoy-upstream-service-time: 0
+```bash
+root@controlplane:~$ ./release-canary/test_canary.py foo.example.com/headers
+Hello World!
+Hello Red Hat!
+...
+Total requests: 50
+* 'Hello World!' responses: 21 (42.0%)
+* 'Hello Red Hat!' responses: 29 (57.99999999999999%)
+* Errors: 0 (0.0%)
 
-HTTP/1.1 500 Internal Server Error
-content-length: 18
-content-type: text/plain
-date: Mon, 28 Sep 2026 03:25:48 GMT
-server: istio-envoy
+root@controlplane:~/traffic-route$ curl foo.example.com/headers
+Hello World!
 
-HTTP/1.1 200 OK
-date: Mon, 28 Sep 2026 03:25:48 GMT
-server: istio-envoy
-last-modified: Mon, 28 Sep 2026 03:21:20 GMT
-etag: "c-65c828f528554"
-accept-ranges: bytes
-content-length: 12
-content-type: text/html
-x-envoy-upstream-service-time: 0
+root@controlplane:~/traffic-route$ curl -s -H "end-user: redhatter" foo.example.com/headers
+Hello Red Hat!
+```
 
-HTTP/1.1 200 OK
-date: Mon, 28 Sep 2026 03:25:48 GMT
-server: istio-envoy
-last-modified: Mon, 28 Sep 2026 03:21:20 GMT
-etag: "c-65c828f528554"
-accept-ranges: bytes
-content-length: 12
-content-type: text/html
-x-envoy-upstream-service-time: 0
+"""
 
-HTTP/1.1 500 Internal Server Error
-content-length: 18
-content-type: text/plain
-date: Mon, 28 Sep 2026 03:25:48 GMT
-server: istio-envoy
-
-root@controlplane:~$ 
-root@controlplane:~$ 
-root@controlplane:~$ 
-
-
+},{
